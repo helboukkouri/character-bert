@@ -6,8 +6,8 @@ This is the repository of the paper "[CharacterBERT: Reconciling ELMo and BERT f
 
 ## Table of contents
 
-- [Paper summary](#summary)
-  - [TL;DR](#tl;dr)
+- [Paper summary](#paper-summary)
+  - [TL;DR](#tldr)
   - [Motivations](#motivations)
 - [How do I use CharacterBERT?](#how-do-i-use-characterbert)
   - [Installation](#installation)
@@ -26,13 +26,8 @@ CharacterBERT is a variant of [BERT](https://arxiv.org/abs/1810.04805) that prod
 <div style="text-align:center">
     <br>
     <img src="./img/archi-compare.png" width="45%"/>
-    <p>Context-independent representations in BERT and CharacterBERT</p>
-    <p>
-        Here, we suppose that `Apple` is an unknown token. We see that BERT splits it<br>
-        into two wordpieces before embedding each unit, while CharacterBERT receives<br>
-        the token as is then attends to its characters to produce a single embedding.
-    </p>
 </div>
+The figure above shows the way context-independent representations are built in BERT and CharacterBERT. Here, we suppose that "Apple" is an unknown token and see that BERT splits it into two wordpieces "Ap" and "##ple" before embedding each unit. On the other hand, CharacterBERT receives the token "Apple" as is then attends to its characters to produce a single token embedding.
 
 ## Motivations
 
@@ -43,15 +38,14 @@ CharacterBERT has two main motivations:
 - BERT uses a wordpiece system as a good compromise between the specificity of tokens and generality of characters. However, working with subwords is not very convenient in practice (Should we average the representations to get the original token embedding for word similarity tasks ? Should we only use the first wordpiece of each token in sequence labelling tasks ? ...)
 
 Inspired by ELMo, we use a CharacterCNN module and manage to get a variant of BERT that produces word-level contextual representations and can be re-adapted on any domain without needing to worry about the suitability of any wordpieces. Moreover, attending to the characters of input tokens also allows us to achieve superior robustness to noise (see _Section 5.5_ of the paper).
-to investigate the possibility of a word-level BERT model that does not rely on wordpieces. In fact, by removing the wordpiece dependency we automatically eliminate the need for a domain-specific subword vocabulary (see Section 2 of the paper). As a result, CharacterBERT can be re-trainedMoreover, using a character-level system (CharacterCNN) also allows to achieve improved robustness compared to vanilla BERT.
 
 ## How do I use CharacterBERT?
 
 ### Installation
 
-We recommend using a virtual environment specific to using CharacterBERT.
+We recommend using a virtual environment that is specific to using CharacterBERT.
 
-If you don't already have Anaconda installed, you can install Miniconda from [this link](https://docs.conda.io/en/latest/miniconda.html#linux-installers). Then, check that conda is up to date:
+If you do not already have `conda` installed, you can install Miniconda from [this link](https://docs.conda.io/en/latest/miniconda.html#linux-installers). Then, check that conda is up to date:
 
 ```bash
 conda update -n base -c defaults conda
@@ -73,7 +67,7 @@ Then install the following packages (~3Gb):
 
 ```bash
 conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
-pip install transformers scikit-learn
+pip install transformers==3.3.1 scikit-learn==0.23.2
 ```
 
 > Note 1: If you will not be running experiments on a GPU, install pyTorch via this command instead `conda install pytorch torchvision cpuonly -c pytorch`
@@ -92,8 +86,7 @@ You can use the `download.py` script to download any of the models below:
 | medical_bert           | Medical Domain BERT initialized from **general_bert** then further pre-trained on [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) clinical notes and [PMC OA](https://www.ncbi.nlm.nih.gov/pmc/tools/openftlist/) biomedical paper abstracts. <sup>2</sup>       |
 | bert-base-uncased      | The original General Domain BERT (base, uncased)                                                                                                                                                                                                                          |
 
-<sup>1</sup> <small>This model uses the same vocabulary as `bert-base-uncased` and was pre-trained to fairly compare **general_character_bert** to BERT.</small><br>
-<sup>2</sup> <small>This model uses the same vocabulary as `bert-base-uncased` and was pre-trained to fairly compare **medical_character_bert** to BERT.</small><br>
+> <sup>1, 2</sup> <small>We pre-train BERT models as well so that we can fairly compare each CharacterBERT model to it's BERT counterpart. Our BERT models use the same architecture and vocabulary as `bert-base-uncased`.</small><br>
 
 For example, to download the medical version of CharacterBERT you can run:
 
@@ -109,11 +102,10 @@ python download.py --model='all'
 
 ### Using CharacterBERT in practice
 
-CharacterBERT's architecture is almost identical to BERT's, therefore you can easilly adapt code from huggingface/transformer to use CharacterBERT.
-
-Basic example: using CharacterBERT for binary classification
+CharacterBERT's architecture is almost identical to BERT, so you can easilly adapt any code that uses the [Transformers](https://github.com/huggingface/transformers) library.
 
 ```python
+""" Basic example: using CharacterBERT for binary classification """
 from transformers import BertForSequenceClassification, BertConfig
 from modeling.character_bert import CharacterBertModel
 
@@ -172,13 +164,13 @@ output = model(input_tensor)[0]
 >>> tensor([[-0.3378, -0.2772]], grad_fn=<AddmmBackward>)  # class logits
 ```
 
-For more complete (but still illustrative) examples you can refer to the `run_experiments.sh` script which can run Classification/SequenceLabelling with BERT/CharacterBERT.
+For more complete (but still illustrative) examples you can refer to the `run_experiments.sh` script which runs a few Classification/SequenceLabelling experiments using BERT/CharacterBERT.
 
 ```bash
 bash run_experiments.sh
 ```
 
-You can adapt the `run_experiments.sh` script to experiment with the available models. You should also be able to add real classification and sequence labelling tasks by adapting the `data.py` script.
+You can adapt the `run_experiments.sh` script to try out any available model. You should also be able to add real classification and sequence labelling tasks by adapting the `data.py` script.
 
 ## How do I pre-train CharacterBERT?
 
@@ -190,7 +182,7 @@ Please refer to the following repository: <https://github.com/helboukkouri/chara
 
 ## Running experiments on GPUs
 
-In order to use GPUs you will need to make sure the pytorch version that is in your conda environment matches your machine's configuration. To do that, you may want to run a few tests.
+In order to use GPUs you will need to make sure the PyTorch version that is in your conda environment matches your machine's configuration. To do that, you may want to run a few tests.
 
 Let's assume you want to use the GPU n°0 on your machine. Then set:
 
@@ -205,7 +197,7 @@ import torch
 print(torch.cuda.is_available())  # Should return `True`
 ```
 
-If the last command returns `False`, then there is probably a mismatch between the installed pytorch version and your machine's configuration. To fix that, run `nvidia-smi` in your terminal and check your driver version:
+If the last command returns `False`, then there is probably a mismatch between the installed PyTorch version and your machine's configuration. To fix that, run `nvidia-smi` in your terminal and check your driver version:
 
 <center><img src="img/nvidiasmi.png" alt="drawing" width="550"/></center>
 
@@ -213,7 +205,7 @@ Then compare this version with the numbers given in the [NVIDIA CUDA Toolkit Rel
 
 <center><img src="img/cudaversions.png" alt="drawing" width="800"/></center>
 
-In this example the shown version is `390.116` which corresponds to `CUDA 9.0`. This means that the appropriate command for installing pytorch is:
+In this example the shown version is `390.116` which corresponds to `CUDA 9.0`. This means that the appropriate command for installing PyTorch is:
 
 ```bash
 conda install pytorch torchvision cudatoolkit=9.0 -c pytorch
