@@ -1,6 +1,6 @@
 # CharacterBERT
 
-[paper]: https://arxiv.org/abs/xxxx.yyyyy
+[paper]: https://drive.google.com/file/d/1nizVtrCsDSED-D_8yE1Oio736ZJYp7UG/view?usp=sharing
 
 This is the repository of the paper "[CharacterBERT: Reconciling ELMo and BERT for Word-LevelOpen-Vocabulary Representations From Characters][paper]" that is soon to appear at COLING 2020.
 
