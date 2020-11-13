@@ -16,6 +16,7 @@ This is the repository of the paper "[CharacterBERT: Reconciling ELMo and BERT f
 - [How do I pre-train CharacterBERT?](#how-do-i-pre-train-characterbert)
 - [How do I reproduce the paper's results?](#how-do-i-reproduce-the-papers-results)
 - [Running experiments on GPUs](#running-experiments-on-gpus)
+- [References](#references)
 
 ## Paper summary
 
@@ -212,3 +213,18 @@ conda install pytorch torchvision cudatoolkit=9.0 -c pytorch
 ```
 
 Now, everything should work fine!
+
+## References
+
+Please cite our paper if you use CharacterBERT in your work:
+
+```
+@misc{boukkouri2020characterbert,
+      title={CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters}, 
+      author={Hicham El Boukkouri and Olivier Ferret and Thomas Lavergne and Hiroshi Noji and Pierre Zweigenbaum and Junichi Tsujii},
+      year={2020},
+      eprint={2010.10392},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
