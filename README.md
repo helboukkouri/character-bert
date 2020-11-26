@@ -67,11 +67,11 @@ conda activate character-bert
 Then install the following packages (~3Gb):
 
 ```bash
-conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+conda install pytorch cudatoolkit=10.2 -c pytorch
 pip install transformers==3.3.1 scikit-learn==0.23.2
 ```
 
-> Note 1: If you will not be running experiments on a GPU, install pyTorch via this command instead `conda install pytorch torchvision cpuonly -c pytorch`
+> Note 1: If you will not be running experiments on a GPU, install pyTorch via this command instead `conda install pytorch cpuonly -c pytorch`
 
 > Note 2: If you just want to be able to load pre-trained CharacterBERT weigths, you do not have to install `scikit-learn` which is only used for computing Precision, Recall, F1 metrics during evaluation.
 
@@ -104,6 +104,44 @@ python download.py --model='all'
 ### Using CharacterBERT in practice
 
 CharacterBERT's architecture is almost identical to BERT, so you can easilly adapt any code that uses the [Transformers](https://github.com/huggingface/transformers) library.
+
+#### Example 1: getting word embeddings from CharacterBERT
+
+```python
+"""Basic example: getting word embeddings from CharacterBERT"""
+from transformers import BertTokenizer
+from modeling.character_bert import CharacterBertModel
+from utils.character_cnn import CharacterIndexer
+
+# Example text
+x = "Hello World!"
+
+# Tokenize the text
+tokenizer = BertTokenizer.from_pretrained(
+    './pretrained-models/bert-base-uncased/')
+x = tokenizer.basic_tokenizer.tokenize(x)
+
+# Add [CLS] and [SEP]
+x = ['[CLS]', *x, '[SEP]']
+
+# Convert token sequence into character indices
+indexer = CharacterIndexer()
+batch = [x]  # This is a batch with a single token sequence x
+batch_ids = indexer.as_padded_tensor(batch)
+
+# Load some pre-trained CharacterBERT
+model = CharacterBertModel.from_pretrained(
+    './pretrained-models/medical_character_bert/')
+
+# Feed batch to CharacterBERT & get the embeddings
+embeddings_for_batch, _ = model(batch_ids)
+embeddings_for_x = embeddings_for_batch[0]
+print('These are the embeddings produces by CharacterBERT (last transformer layer)')
+for token, embedding in zip(x, embeddings_for_x):
+    print(token, embedding)
+```
+
+#### Example 2: using CharacterBERT for binary classification 
 
 ```python
 """ Basic example: using CharacterBERT for binary classification """
@@ -209,7 +247,7 @@ Then compare this version with the numbers given in the [NVIDIA CUDA Toolkit Rel
 In this example the shown version is `390.116` which corresponds to `CUDA 9.0`. This means that the appropriate command for installing PyTorch is:
 
 ```bash
-conda install pytorch torchvision cudatoolkit=9.0 -c pytorch
+conda install pytorch cudatoolkit=9.0 -c pytorch
 ```
 
 Now, everything should work fine!
