@@ -1,8 +1,8 @@
 # CharacterBERT
 
-[paper]: https://arxiv.org/abs/2010.10392
+[paper]: https://aclanthology.org/2020.coling-main.609/
 
-This is the repository of the paper "[CharacterBERT: Reconciling ELMo and BERT for Word-LevelOpen-Vocabulary Representations From Characters][paper]" that is soon to appear at COLING 2020.
+This is the code repository for the paper "[CharacterBERT: Reconciling ELMo and BERT for Word-LevelOpen-Vocabulary Representations From Characters][paper]" that came out at COLING 2020.
 
 > 2021-02-25: Code for pre-training BERT and CharacterBERT is now available [here](https://github.com/helboukkouri/character-bert-pretraining)!
 
@@ -24,40 +24,45 @@ This is the repository of the paper "[CharacterBERT: Reconciling ELMo and BERT f
 
 ### TL;DR
 
-CharacterBERT is a variant of [BERT](https://arxiv.org/abs/1810.04805) that produces **word-level contextual representations** by attending to the characters of each input token. To achieve that, instead of relying on a matrix of pre-defined wordpieces, it uses a [CharacterCNN](link-to-charcnn) module similar to [ELMo](https://arxiv.org/abs/1802.05365) to produce representations for arbitrary tokens. Besides this difference, CharacterBERT's architecture is identical BERT's.
+`CharacterBERT` is a variant of [BERT](https://arxiv.org/abs/1810.04805) that produces **contextual representations** at the **word level**.
+
+This is achieved by attending to the characters of each input token and dynamically building token representations from that. In fact, contrary to standard `BERT`--which relies on a matrix of pre-defined wordpieces, `this approach` uses a [CharacterCNN](./img/archi-compare.png) module, similar to [ELMo](https://arxiv.org/abs/1802.05365), that can generate representations for arbitrary input tokens.
 
 <div style="text-align:center">
     <br>
     <img src="./img/archi-compare.png" width="45%"/>
 </div>
-The figure above shows the way context-independent representations are built in BERT and CharacterBERT. Here, we suppose that "Apple" is an unknown token and see that BERT splits it into two wordpieces "Ap" and "##ple" before embedding each unit. On the other hand, CharacterBERT receives the token "Apple" as is then attends to its characters to produce a single token embedding.
+
+The figure above shows how context-independent representations are built in `BERT`, vs. how they are built in `CharacterBERT`. Here, we assume that "**Apple**" is an unknown token, which results in `BERT` splitting the token into two wordpieces "**Ap**" and "**##ple**" and embedding each unit. On the other hand, `CharacterBERT` processes the token "*Apple*" as is, then attends to its characters in order to produce a `single token embedding`.
 
 ## Motivations
 
 CharacterBERT has two main motivations:
 
-- In more and more cases, the original BERT is adapted to new domains (e.g. medical domain) by re-training it on specialized corpora. In these cases, the original (general domain) wordpiece vocabulary is kept despite the model being actually used on a different domain, which seemed suboptimal (see _Section 2_ of the paper). A naive solution would be to train a new BERT from scratch with a specialized wordpiece vocabulary, but training a single BERT is costly let alone training one for each and every domain of interest.
+- It is frequent to adapt the original `BERT` to new specialized domains (e.g. **medical**, **legal**, **scientific** domains..) by simply re-training it on a set of specialized corpora. This results in the original (**general domain**) wordpiece vocabulary being re-used despite the final model being actually targeted toward a different potentially highly specialized domain, which is arguably suboptimal (see _Section 2_ of the paper).
 
-- BERT uses a wordpiece system as a good compromise between the specificity of tokens and generality of characters. However, working with subwords is not very convenient in practice (Should we average the representations to get the original token embedding for word similarity tasks ? Should we only use the first wordpiece of each token in sequence labelling tasks ? ...)
+  A straightforward solution in this case would be to train a **new BERT from scratch** with a **specialized wordpiece vocabulary**. However, training a single BERT is already costly enough let alone needing to train one for each and every domain of interest.
 
-Inspired by ELMo, we use a CharacterCNN module and manage to get a variant of BERT that produces word-level contextual representations and can be re-adapted on any domain without needing to worry about the suitability of any wordpieces. Moreover, attending to the characters of input tokens also allows us to achieve superior robustness to noise (see _Section 5.5_ of the paper).
+- `BERT` uses a wordpiece system to strike a good balance between the **specificity** of tokens and **flexibility** of characters. However, working with subwords is not the most convenient in practice (should we average the representations to get the original token embedding for word similarity tasks? should we only use the first wordpiece of each token in sequence labelling tasks? ...) and most would just prefer to work with tokens.
+
+Inspired by `ELMo`, we use a `CharacterCNN module` and manage to get a variant of BERT that produces both **word-level** and **contextual representations** which can also be re-adapted **as many times as necessary**, on **any domain**, without needing to worry about the suitability of any wordpieces. And as a cherry on top, attending to the characters of each input token also leads us to a **more robust model** against any **typos** or **misspellings** (see _Section 5.5_ of the paper).
 
 ## How do I use CharacterBERT?
 
 ### Installation
 
-We recommend using a virtual environment that is specific to using CharacterBERT.
+We recommend using a virtual environment that is specific to using `CharacterBERT`.
 
-If you do not already have `conda` installed, you can install Miniconda from [this link](https://docs.conda.io/en/latest/miniconda.html#linux-installers) (~450Mb). Then, check that conda is up to date:
+If you do not already have `conda` installed, you can install Miniconda from [this link](https://docs.conda.io/projects/miniconda/en/latest/miniconda-install.html). Then, check that your conda is up to date:
 
 ```bash
 conda update -n base -c defaults conda
 ```
 
-And create a fresh conda environment (~220Mb):
+Create a fresh conda environment:
 
 ```bash
-conda create python=3.8 --name=character-bert
+conda create python=3.10 --name=character-bert
 ```
 
 If not already activated, activate the new conda environment using:
@@ -66,14 +71,14 @@ If not already activated, activate the new conda environment using:
 conda activate character-bert
 ```
 
-Then install the following packages (~3Gb):
+Then install the following packages:
 
 ```bash
-conda install pytorch cudatoolkit=10.2 -c pytorch
-pip install transformers==3.3.1 scikit-learn==0.23.2
+conda install pytorch cudatoolkit=11.8 -c pytorch
+pip install transformers==4.34.0 scikit-learn==1.3.1 gdown==4.7.1
 ```
 
-> Note 1: If you will not be running experiments on a GPU, install pyTorch via this command instead `conda install pytorch cpuonly -c pytorch`
+> Note 1: If you will not be running experiments on a GPU, install pyTorch via this command instead:<br> `conda install pytorch cpuonly -c pytorch`
 
 > Note 2: If you just want to be able to load pre-trained CharacterBERT weigths, you do not have to install `scikit-learn` which is only used for computing Precision, Recall, F1 metrics during evaluation.
 
@@ -89,15 +94,15 @@ You can use the `download.py` script to download any of the models below:
 | medical_bert           | Medical Domain BERT initialized from **general_bert** then further pre-trained on [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) clinical notes and [PMC OA](https://www.ncbi.nlm.nih.gov/pmc/tools/openftlist/) biomedical paper abstracts. <sup>2</sup>       |
 | bert-base-uncased      | The original General Domain [BERT (base, uncased)](https://github.com/google-research/bert#pre-trained-models)                                                                                                                                                                                                                          |
 
-> <sup>1, 2</sup> <small>We pre-train BERT models as well so that we can fairly compare each CharacterBERT model to it's BERT counterpart. Our BERT models use the same architecture and vocabulary as `bert-base-uncased`.</small><br>
+> <sup>1, 2</sup> <small>We offer BERT models as well as CharacterBERT models since we have pre-trained both architectures in an effort to fairly compare these architectures. Our BERT models use the same architecture and starting wordpiece vocabulary as `bert-base-uncased`.</small><br>
 
-For example, to download the medical version of CharacterBERT you can run:
+For instance, let's download the medical version of CharacterBERT:
 
 ```bash
 python download.py --model='medical_character_bert'
 ```
 
-Or you can download all models by running:
+We can download also download all models in a single command:
 
 ```bash
 python download.py --model='all'
@@ -105,7 +110,7 @@ python download.py --model='all'
 
 ### Using CharacterBERT in practice
 
-CharacterBERT's architecture is almost identical to BERT, so you can easilly adapt any code that uses the [Transformers](https://github.com/huggingface/transformers) library.
+CharacterBERT's architecture is almost identical to BERT's, so you can easilly adapt any code that from the [Transformers](https://github.com/huggingface/transformers) library.
 
 #### Example 1: getting word embeddings from CharacterBERT
 
@@ -201,7 +206,7 @@ input_tensor.shape
 
 #### USING CHARACTER_BERT FOR INFERENCE ####
 
-output = model(input_tensor)[0]
+output = model(input_tensor, return_dict=False)[0]
 >>> tensor([[-0.3378, -0.2772]], grad_fn=<AddmmBackward>)  # class logits
 ```
 
@@ -212,14 +217,6 @@ bash run_experiments.sh
 ```
 
 You can adapt the `run_experiments.sh` script to try out any available model. You should also be able to add real classification and sequence labelling tasks by adapting the `data.py` script.
-
-## How do I pre-train CharacterBERT?
-
-Please refer to the following repository: <https://github.com/helboukkouri/character-bert-pretraining>
-
-## How do I reproduce the paper's results?
-
-Please refer to the following repository: <https://github.com/helboukkouri/character-bert-finetuning>
 
 ## Running experiments on GPUs
 

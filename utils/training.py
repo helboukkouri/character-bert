@@ -93,7 +93,7 @@ def train(args, dataset, model, tokenizer, labels, pad_token_label_id):
                 "token_type_ids": batch[2],
                 "labels": batch[3]}
 
-            outputs = model(**inputs)
+            outputs = model(**inputs, return_dict=False)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
             if args.gradient_accumulation_steps > 1:
@@ -171,7 +171,7 @@ def evaluate(args, eval_dataset, model, labels, pad_token_label_id):
                 "attention_mask": batch[1],
                 "token_type_ids": batch[2],
                 "labels": batch[3]}
-            outputs = model(**inputs)
+            outputs = model(**inputs, return_dict=False)
             tmp_eval_loss, logits = outputs[:2]
 
             eval_loss += tmp_eval_loss.item()
