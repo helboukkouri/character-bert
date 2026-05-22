@@ -58,6 +58,7 @@ class FineTuningDataTests(unittest.TestCase):
         examples = load_classification_hf_dataset(
             dataset,
             text_column="sentence",
+            text_pair_column=None,
             label_column="label",
             labels=["negative", "positive"],
             do_lower_case=True,
@@ -65,6 +66,30 @@ class FineTuningDataTests(unittest.TestCase):
 
         self.assertEqual(examples[0].tokens_a, ["a", "warm", "movie", "."])
         self.assertEqual(examples[0].label, "positive")
+
+    def test_loads_datasets_regression_rows(self):
+        dataset = Dataset.from_dict(
+            {
+                "sentence1": ["A dog runs."],
+                "sentence2": ["An animal moves."],
+                "label": [4.2],
+                "idx": [7],
+            }
+        )
+
+        examples = load_classification_hf_dataset(
+            dataset,
+            text_column="sentence1",
+            text_pair_column="sentence2",
+            label_column="label",
+            labels=None,
+            do_lower_case=True,
+            regression=True,
+        )
+
+        self.assertEqual(examples[0].id, 7)
+        self.assertEqual(examples[0].tokens_b, ["an", "animal", "moves", "."])
+        self.assertEqual(examples[0].label, 4.2)
 
     def test_loads_and_retokenizes_sequence_labeling_format(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -104,8 +129,9 @@ class FineTuningDataTests(unittest.TestCase):
         self.assertEqual(examples[0].label_sequence, ["B-PER", "I-PER"])
 
     def test_classic_dataset_presets_are_available(self):
-        self.assertEqual(DATASET_PRESETS["sst2"]["task"], "classification")
-        self.assertEqual(DATASET_PRESETS["conll2003"]["task"], "sequence_labeling")
+        self.assertEqual(DATASET_PRESETS["sst2"].task, "classification")
+        self.assertEqual(DATASET_PRESETS["stsb"].task, "regression")
+        self.assertEqual(DATASET_PRESETS["conll2003"].task, "sequence_labeling")
 
 
 class FineTuningFeatureTests(unittest.TestCase):

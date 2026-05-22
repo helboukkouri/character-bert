@@ -11,7 +11,7 @@ class ClassificationExample:
     id: int
     tokens_a: list[str]
     tokens_b: list[str] | None
-    label: str
+    label: str | float | None
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,8 @@ class FineTuningData:
     train_examples: list[ClassificationExample] | list[SequenceLabelingExample]
     validation_examples: list[ClassificationExample] | list[SequenceLabelingExample]
     test_examples: list[ClassificationExample] | list[SequenceLabelingExample]
-    labels: list[str]
+    labels: list[str] | None
+    name: str = "custom"
 
 
 def load_classification_dataset(
@@ -59,22 +60,30 @@ def load_classification_hf_dataset(
     dataset,
     *,
     text_column: str,
+    text_pair_column: str | None = None,
     label_column: str,
-    labels: list[str],
+    labels: list[str] | None,
     do_lower_case: bool,
+    regression: bool = False,
 ) -> list[ClassificationExample]:
     tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
     examples = []
     for index, row in enumerate(dataset):
         label = row[label_column]
-        if isinstance(label, int):
+        if regression:
+            label = None if float(label) < 0 else float(label)
+        elif isinstance(label, int) and label >= 0 and labels is not None:
             label = labels[label]
+        elif isinstance(label, int) and label < 0:
+            label = None
         examples.append(
             ClassificationExample(
-                id=index,
+                id=int(row["idx"]) if "idx" in row else index,
                 tokens_a=tokenizer.tokenize(row[text_column]),
-                tokens_b=None,
-                label=str(label),
+                tokens_b=tokenizer.tokenize(row[text_pair_column])
+                if text_pair_column is not None
+                else None,
+                label=label if label is None or isinstance(label, float) else str(label),
             )
         )
     return examples

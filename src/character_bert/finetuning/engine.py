@@ -11,7 +11,11 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from tqdm.auto import tqdm, trange
 from transformers import PreTrainedTokenizerBase, get_linear_schedule_with_warmup
 
-from character_bert.finetuning.metrics import classification_metrics, sequence_labeling_metrics
+from character_bert.finetuning.metrics import (
+    classification_metrics,
+    regression_metrics,
+    sequence_labeling_metrics,
+)
 from character_bert.finetuning.utils.seed import set_seed
 
 LOGGER = logging.getLogger(__name__)
@@ -143,7 +147,7 @@ def evaluate(
     model: torch.nn.Module,
     labels: list[str],
     pad_token_label_id: int,
-) -> tuple[dict[str, float], list[int] | list[list[str]]]:
+) -> tuple[dict[str, float], list[int] | list[float] | list[list[str]]]:
     eval_dataloader = DataLoader(
         eval_dataset,
         sampler=SequentialSampler(eval_dataset),
@@ -179,13 +183,18 @@ def evaluate(
         )
 
     eval_loss = eval_loss / max(len(eval_dataloader), 1)
-    label_map = {index: label for index, label in enumerate(labels)}
-
     if config.task == "classification":
+        label_map = {index: label for index, label in enumerate(labels)}
         predicted_labels = np.argmax(predictions, axis=1)
         results = {"loss": eval_loss, **classification_metrics(label_ids, predicted_labels)}
         return results, predicted_labels.tolist()
 
+    if config.task == "regression":
+        predicted_scores = np.squeeze(predictions, axis=-1)
+        results = {"loss": eval_loss, **regression_metrics(label_ids, predicted_scores)}
+        return results, predicted_scores.tolist()
+
+    label_map = {index: label for index, label in enumerate(labels)}
     predicted_label_ids = np.argmax(predictions, axis=2)
     true_label_list: list[list[str]] = []
     prediction_list: list[list[str]] = []
@@ -202,3 +211,35 @@ def evaluate(
 
     results = {"loss": eval_loss, **sequence_labeling_metrics(true_label_list, prediction_list)}
     return results, prediction_list
+
+
+def predict(
+    *,
+    config: TrainingConfig,
+    dataset: TensorDataset,
+    model: torch.nn.Module,
+) -> np.ndarray:
+    dataloader = DataLoader(
+        dataset,
+        sampler=SequentialSampler(dataset),
+        batch_size=config.eval_batch_size,
+    )
+    predictions = None
+    model.eval()
+    for batch in tqdm(dataloader, desc="Predicting"):
+        batch = tuple(tensor.to(config.device) for tensor in batch)
+        with torch.no_grad():
+            outputs = model(
+                input_ids=batch[0],
+                attention_mask=batch[1],
+                token_type_ids=batch[2],
+                return_dict=False,
+            )
+            logits = outputs[0]
+        batch_predictions = logits.detach().cpu().numpy()
+        predictions = (
+            batch_predictions
+            if predictions is None
+            else np.append(predictions, batch_predictions, axis=0)
+        )
+    return predictions

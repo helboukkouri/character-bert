@@ -15,8 +15,14 @@ from transformers import (
     BertTokenizer,
 )
 
-from character_bert.finetuning.datasets import DATASET_PRESETS, load_finetuning_dataset
-from character_bert.finetuning.engine import TrainingConfig, evaluate, train
+from character_bert.finetuning.datasets import (
+    DATASET_PRESETS,
+    GLUE_TASKS,
+    glue_submission_splits,
+    load_finetuning_dataset,
+    load_test_examples,
+)
+from character_bert.finetuning.engine import TrainingConfig, evaluate, predict, train
 from character_bert.finetuning.features import (
     classification_features,
     features_to_dataset,
@@ -73,6 +79,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--do-lower-case", action="store_true")
     parser.add_argument("--do-train", action="store_true")
     parser.add_argument("--do-predict", action="store_true")
+    parser.add_argument(
+        "--write-glue-submission",
+        action="store_true",
+        help="Write GLUE leaderboard TSV files for the dataset test split.",
+    )
     parser.add_argument("--train-batch-size", type=int, default=1)
     parser.add_argument("--eval-batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
@@ -166,7 +177,8 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
         ),
     }
 
-    model = _load_model(data.task, checkpoint_dir, len(labels), is_character_model)
+    num_labels = len(labels) if labels is not None else 1
+    model = _load_model(data.task, checkpoint_dir, num_labels, is_character_model)
     model.to(device)
 
     config = TrainingConfig(
@@ -187,6 +199,7 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
 
     best_metric = None
     best_epoch = None
+    results = None
     if args.do_train:
         _, _, best_metric, best_epoch = train(
             config=config,
@@ -200,7 +213,7 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
 
     if args.do_predict:
         if args.do_train:
-            model = _load_model(data.task, output_dir, len(labels), is_character_model)
+            model = _load_model(data.task, output_dir, num_labels, is_character_model)
             model.to(device)
         results, _ = evaluate(
             config=config,
@@ -210,9 +223,28 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
             pad_token_label_id=pad_token_label_id,
         )
         _write_results(output_dir, results, best_metric, best_epoch)
-        return results
 
-    return None
+    if args.write_glue_submission:
+        if args.do_train:
+            model = _load_model(data.task, output_dir, num_labels, is_character_model)
+            model.to(device)
+        _write_glue_submission(
+            args=args,
+            data=data,
+            model=model,
+            config=config,
+            tokenizer=indexer,
+            feature_tokenizer=feature_tokenizer,
+            labels=labels,
+            max_seq_length=max_seq_length,
+            is_character_model=is_character_model,
+            pad_token_id=pad_token_id,
+            pad_token_label_id=pad_token_label_id,
+            output_dir=output_dir,
+        )
+        return results if args.do_predict else None
+
+    return results if args.do_predict else None
 
 
 def _resolve_output_dir(args: argparse.Namespace, task: str) -> Path:
@@ -310,6 +342,8 @@ def _load_legacy_examples(args: argparse.Namespace, task: str):
 def _retokenize_examples(examples, tokenize, task: str):
     if task == "classification":
         return retokenize_classification_examples(examples, tokenize)
+    if task == "regression":
+        return retokenize_classification_examples(examples, tokenize)
     return retokenize_sequence_labeling_examples(examples, tokenize)
 
 
@@ -322,6 +356,8 @@ def _labels_for_examples(
     examples = [*train_examples, *validation_examples, *test_examples]
     if task == "classification":
         return sorted({example.label for example in examples})
+    if task == "regression":
+        return None
     return sorted({label for example in examples for label in example.label_sequence})
 
 
@@ -332,7 +368,7 @@ def _max_sequence_length(
     test_examples: list[ClassificationExample] | list[SequenceLabelingExample],
 ) -> int:
     examples = [*train_examples, *validation_examples, *test_examples]
-    if task == "classification":
+    if task in {"classification", "regression"}:
         longest = max(
             len(example.tokens_a) + (len(example.tokens_b) if example.tokens_b else 0)
             for example in examples
@@ -352,7 +388,7 @@ def _build_dataset(
     pad_token_id: int,
     pad_token_label_id: int,
 ):
-    if task == "classification":
+    if task in {"classification", "regression"}:
         features = classification_features(
             examples,
             tokenizer=tokenizer,
@@ -360,6 +396,7 @@ def _build_dataset(
             max_seq_length=max_seq_length,
             is_character_model=is_character_model,
             pad_token_id=pad_token_id,
+            regression=task == "regression",
         )
     else:
         features = sequence_labeling_features(
@@ -377,14 +414,19 @@ def _build_dataset(
 def _load_model(task: str, checkpoint_dir: Path, num_labels: int, is_character_model: bool):
     model_class = (
         BertForSequenceClassification
-        if task == "classification"
+        if task in {"classification", "regression"}
         else BertForTokenClassification
     )
+    model_num_labels = 1 if task == "regression" else num_labels
     if not is_character_model:
-        config = BertConfig.from_pretrained(checkpoint_dir, num_labels=num_labels)
+        config = BertConfig.from_pretrained(checkpoint_dir, num_labels=model_num_labels)
+        if task == "regression":
+            config.problem_type = "regression"
         return model_class.from_pretrained(checkpoint_dir, config=config)
 
-    config = CharacterBertConfig.from_pretrained(checkpoint_dir, num_labels=num_labels)
+    config = CharacterBertConfig.from_pretrained(checkpoint_dir, num_labels=model_num_labels)
+    if task == "regression":
+        config.problem_type = "regression"
     model = model_class(config=config)
     model.bert = CharacterBertModel(config=config)
 
@@ -418,3 +460,62 @@ def _write_results(
         output_file.write("--- Performance on test set ---\n")
         for key, value in sorted(results.items()):
             output_file.write(f"{key}: {value}\n")
+
+
+def _write_glue_submission(
+    *,
+    args: argparse.Namespace,
+    data: FineTuningData,
+    model: torch.nn.Module,
+    config: TrainingConfig,
+    tokenizer,
+    feature_tokenizer,
+    labels: list[str] | None,
+    max_seq_length: int,
+    is_character_model: bool,
+    pad_token_id: int,
+    pad_token_label_id: int,
+    output_dir: Path,
+) -> None:
+    if data.name not in GLUE_TASKS:
+        raise ValueError("--write-glue-submission is only available for GLUE datasets")
+
+    spec = GLUE_TASKS[data.name]
+    submission_dir = output_dir / "glue_submission"
+    submission_dir.mkdir(parents=True, exist_ok=True)
+
+    for split_name, filename in glue_submission_splits(spec).items():
+        examples = load_test_examples(
+            spec,
+            split_name,
+            labels=labels,
+            do_lower_case=args.do_lower_case,
+            max_examples=args.max_test_examples,
+        )
+        examples = _retokenize_examples(examples, feature_tokenizer.tokenize, data.task)
+        dataset = _build_dataset(
+            data.task,
+            examples,
+            tokenizer,
+            labels,
+            max_seq_length,
+            is_character_model,
+            pad_token_id,
+            pad_token_label_id,
+        )
+        logits = predict(config=config, dataset=dataset, model=model)
+        predictions = _glue_predictions(data.task, logits, labels)
+        with (submission_dir / filename).open("w", encoding="utf-8") as output_file:
+            output_file.write("index\tprediction\n")
+            for example, prediction_value in zip(examples, predictions, strict=True):
+                output_file.write(f"{example.id}\t{prediction_value}\n")
+
+
+def _glue_predictions(
+    task: str,
+    logits,
+    labels: list[str] | None,
+) -> list[str]:
+    if task == "regression":
+        return [f"{min(5.0, max(0.0, float(value))):.3f}" for value in logits.squeeze(-1)]
+    return [labels[index] for index in logits.argmax(axis=1)]

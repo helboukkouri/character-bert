@@ -22,6 +22,23 @@ def classification_metrics(labels: Sequence[int], predictions: Sequence[int]) ->
     }
 
 
+def regression_metrics(labels: Sequence[float], predictions: Sequence[float]) -> dict[str, float]:
+    labels_array = np.asarray(labels, dtype=float)
+    predictions_array = np.asarray(predictions, dtype=float)
+    if labels_array.shape != predictions_array.shape:
+        raise ValueError("labels and predictions must have the same shape")
+    if labels_array.size == 0:
+        return {"pearson": 0.0, "spearman": 0.0, "f1": 0.0}
+
+    pearson = _pearson(labels_array, predictions_array)
+    spearman = _pearson(_rank(labels_array), _rank(predictions_array))
+    return {
+        "pearson": pearson,
+        "spearman": spearman,
+        "f1": (pearson + spearman) / 2,
+    }
+
+
 def sequence_labeling_metrics(
     labels: Sequence[Sequence[str]],
     predictions: Sequence[Sequence[str]],
@@ -32,6 +49,19 @@ def sequence_labeling_metrics(
         "f1": f1_score(labels, predictions),
         "accuracy": sequence_accuracy(labels, predictions),
     }
+
+
+def _pearson(labels: np.ndarray, predictions: np.ndarray) -> float:
+    if np.std(labels) == 0 or np.std(predictions) == 0:
+        return 0.0
+    return float(np.corrcoef(labels, predictions)[0, 1])
+
+
+def _rank(values: np.ndarray) -> np.ndarray:
+    order = np.argsort(values)
+    ranks = np.empty_like(order, dtype=float)
+    ranks[order] = np.arange(len(values), dtype=float)
+    return ranks
 
 
 def get_entities(sequence: Sequence[str] | Sequence[Sequence[str]]) -> list[tuple[str, int, int]]:

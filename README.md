@@ -83,18 +83,30 @@ Download and training commands create them when needed.
 
 ## Fine-Tuning
 
-The fine-tuning app supports the original classification and sequence-labeling file
-formats, plus a couple of classic `datasets` presets for quick checks:
+The fine-tuning app uses classic `datasets` presets by default. GLUE tasks are
+first-class because they cover the core sentence and sentence-pair workflows and
+can emit leaderboard-style test TSV files.
 
 ```bash
-uv run character-bert-finetune \
-  --task classification \
-  --embedding general_character_bert \
-  --train-file path/to/train.txt \
-  --test-file path/to/test.txt \
+uv run --extra finetuning character-bert-finetune \
+  --dataset sst2 \
+  --embedding bert-base-uncased \
+  --num-train-epochs 3 \
   --do-train \
-  --do-predict
+  --do-predict \
+  --write-glue-submission
 ```
+
+Supported GLUE presets:
+
+```text
+cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli
+```
+
+`--write-glue-submission` writes files under `results/.../glue_submission/`.
+For MNLI it writes both `MNLI-m.tsv` and `MNLI-mm.tsv`.
+
+Small GPU smoke checks:
 
 ```bash
 uv run --extra finetuning character-bert-finetune \
@@ -115,6 +127,9 @@ uv run --extra finetuning character-bert-finetune \
   --max-test-examples 4 \
   --do-predict
 ```
+
+The legacy file loaders are still present for compatibility, but new examples should
+prefer dataset presets.
 
 ## Smoke Test
 

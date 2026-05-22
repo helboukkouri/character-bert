@@ -14,19 +14,20 @@ class InputFeatures:
     input_ids: list[int] | torch.Tensor
     attention_mask: list[int]
     token_type_ids: list[int]
-    label_ids: int | list[int]
+    label_ids: int | float | list[int]
 
 
 def classification_features(
     examples: list[ClassificationExample],
     *,
     tokenizer,
-    labels: list[str],
+    labels: list[str] | None,
     max_seq_length: int,
     is_character_model: bool,
     pad_token_id: int = 0,
+    regression: bool = False,
 ) -> list[InputFeatures]:
-    label_map = {label: index for index, label in enumerate(labels)}
+    label_map = {} if labels is None else {label: index for index, label in enumerate(labels)}
     features = []
     for example in examples:
         tokens_a = list(example.tokens_a)
@@ -56,7 +57,7 @@ def classification_features(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 token_type_ids=token_type_ids,
-                label_ids=label_map[example.label],
+                label_ids=_classification_label_id(example.label, label_map, regression),
             )
         )
     return features
@@ -131,7 +132,9 @@ def features_to_dataset(
         [feature.token_type_ids for feature in features],
         dtype=torch.long,
     )
-    if task == "sequence_labeling":
+    if task == "regression":
+        all_label_ids = torch.tensor([feature.label_ids for feature in features], dtype=torch.float)
+    elif task == "sequence_labeling":
         all_label_ids = torch.tensor(
             [feature.label_ids for feature in features],
             dtype=torch.long,
@@ -140,6 +143,18 @@ def features_to_dataset(
         all_label_ids = torch.tensor([feature.label_ids for feature in features], dtype=torch.long)
 
     return TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_label_ids)
+
+
+def _classification_label_id(
+    label: str | float | None,
+    label_map: dict[str, int],
+    regression: bool,
+) -> int | float:
+    if label is None:
+        return 0.0 if regression else 0
+    if regression:
+        return float(label)
+    return label_map[str(label)]
 
 
 def _tokens_to_model_ids(
