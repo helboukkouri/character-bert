@@ -103,7 +103,10 @@ def sequence_accuracy(
         raise ValueError("labels and predictions must contain the same number of tokens")
     if not flat_labels:
         return 0.0
-    correct = sum(label == prediction for label, prediction in zip(flat_labels, flat_predictions))
+    correct = sum(
+        label == prediction
+        for label, prediction in zip(flat_labels, flat_predictions, strict=True)
+    )
     return correct / len(flat_labels)
 
 

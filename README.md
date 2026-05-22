@@ -35,9 +35,12 @@ is genuinely shared.
 ## Setup
 
 ```bash
-uv venv --python 3.12
+uv venv --python 3.14
 uv sync --extra dev --extra finetuning --extra pretraining --extra legacy-downloads
 ```
+
+The package supports Python 3.12 and newer. Development targets the latest stable
+Python 3.14 line so the refreshed repo stays ahead of near-term deprecations.
 
 For a minimal runtime install:
 

@@ -2,14 +2,16 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import BertConfig
+from transformers.masking_utils import create_bidirectional_mask, create_causal_mask
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 from transformers.models.bert.modeling_bert import (
-    BertForPreTrainingOutput,
     BertEncoder,
+    BertForPreTrainingOutput,
     BertPooler,
-    BertPreTrainingHeads,
     BertPreTrainedModel,
+    BertPreTrainingHeads,
 )
+from transformers.pytorch_utils import apply_chunking_to_forward
 
 from character_bert.modeling.character_cnn import CharacterCNN
 from character_bert.modeling.configuration import CharacterBertConfig
@@ -44,7 +46,10 @@ class CharacterBertEmbeddings(nn.Module):
 
         sequence_length = input_shape[1]
         if position_ids is None:
-            position_ids = self.position_ids[:, :sequence_length]
+            position_ids = torch.arange(
+                sequence_length,
+                device=self.position_ids.device,
+            ).unsqueeze(0)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=position_ids.device)
 
@@ -117,52 +122,129 @@ class CharacterBertModel(BertPreTrainedModel):
         )
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-        encoder_extended_attention_mask = None
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        encoder_outputs = self.encoder(
+
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+                past_key_values=None,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+        sequence_output, hidden_states, attentions, cross_attentions = self._encode(
             embedding_output,
-            attention_mask=extended_attention_mask,
-            head_mask=head_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            output = (sequence_output, pooled_output)
+            if output_hidden_states:
+                output += (hidden_states,)
+            if output_attentions:
+                output += (attentions,)
+            return output
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
+            past_key_values=None,
+            hidden_states=hidden_states,
+            attentions=attentions,
+            cross_attentions=cross_attentions,
         )
+
+    def _encode(
+        self,
+        hidden_states: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor,
+        encoder_hidden_states: torch.Tensor | None,
+        encoder_attention_mask: torch.Tensor | None,
+        output_attentions: bool,
+        output_hidden_states: bool,
+    ) -> tuple[
+        torch.Tensor,
+        tuple[torch.Tensor, ...] | None,
+        tuple[torch.Tensor, ...] | None,
+        tuple[torch.Tensor, ...] | None,
+    ]:
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+
+        for layer_module in self.encoder.layer:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if output_attentions:
+                self_attention_output, attention_probs = layer_module.attention(
+                    hidden_states,
+                    attention_mask,
+                )
+                attention_output = self_attention_output
+                all_self_attentions += (attention_probs,)
+
+                if layer_module.is_decoder and encoder_hidden_states is not None:
+                    if not hasattr(layer_module, "crossattention"):
+                        raise ValueError(
+                            "Decoder layers need cross-attention modules when "
+                            "`encoder_hidden_states` is provided."
+                        )
+                    cross_attention_output, cross_attention_probs = layer_module.crossattention(
+                        attention_output,
+                        None,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                    )
+                    attention_output = cross_attention_output
+                    all_cross_attentions += (cross_attention_probs,)
+
+                hidden_states = apply_chunking_to_forward(
+                    layer_module.feed_forward_chunk,
+                    layer_module.chunk_size_feed_forward,
+                    layer_module.seq_len_dim,
+                    attention_output,
+                )
+            else:
+                hidden_states = layer_module(
+                    hidden_states,
+                    attention_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                )
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        return hidden_states, all_hidden_states, all_self_attentions, all_cross_attentions
 
 
 class CharacterBertForPreTraining(BertPreTrainedModel):

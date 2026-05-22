@@ -1,6 +1,6 @@
 from character_bert.modeling import (
-    CharacterBertForPreTraining,
     CharacterBertConfig,
+    CharacterBertForPreTraining,
     CharacterBertModel,
     CharacterCNN,
     CharacterIndexer,

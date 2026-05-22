@@ -14,7 +14,6 @@ from transformers import PreTrainedTokenizerBase, get_linear_schedule_with_warmu
 from character_bert.finetuning.metrics import classification_metrics, sequence_labeling_metrics
 from character_bert.finetuning.utils.seed import set_seed
 
-
 LOGGER = logging.getLogger(__name__)
 
 

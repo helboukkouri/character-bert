@@ -6,7 +6,6 @@ from pathlib import Path
 import requests
 from huggingface_hub import snapshot_download
 
-
 HUB_CHECKPOINTS = {
     "hf_character_bert": "helboukkouri/character-bert",
     "hf_character_bert_medical": "helboukkouri/character-bert-medical",

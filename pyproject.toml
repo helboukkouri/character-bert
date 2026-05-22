@@ -3,33 +3,34 @@ name = "character-bert"
 version = "0.2.0"
 description = "CharacterBERT models, pretraining, and fine-tuning utilities."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [
     { name = "Hicham El Boukkouri" },
 ]
 dependencies = [
-    "torch>=2.2",
-    "transformers>=4.40",
-    "huggingface-hub>=0.23",
-    "safetensors>=0.4",
-    "numpy>=1.26",
-    "tqdm>=4.66",
+    "torch>=2.12",
+    "transformers>=5.9",
+    "huggingface-hub>=1.16",
+    "safetensors>=0.7",
+    "numpy>=2.4",
+    "requests>=2.34",
+    "tqdm>=4.67",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.2",
-    "ruff>=0.5",
+    "pytest>=9.0",
+    "ruff>=0.15",
 ]
 finetuning = [
-    "scikit-learn>=1.4",
-    "datasets>=2.19",
-    "evaluate>=0.4",
+    "scikit-learn>=1.8",
+    "datasets>=4.8",
+    "evaluate>=0.4.6",
 ]
 pretraining = [
-    "datasets>=2.19",
-    "accelerate>=0.30",
+    "datasets>=4.8",
+    "accelerate>=1.13",
 ]
 legacy-downloads = [
     "gdown>=6.0",
@@ -50,7 +51,7 @@ package = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
