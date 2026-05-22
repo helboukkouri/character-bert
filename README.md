@@ -84,7 +84,7 @@ Download and training commands create them when needed.
 ## Fine-Tuning
 
 The fine-tuning app supports the original classification and sequence-labeling file
-formats:
+formats, plus a couple of classic `datasets` presets for quick checks:
 
 ```bash
 uv run character-bert-finetune \
@@ -93,6 +93,26 @@ uv run character-bert-finetune \
   --train-file path/to/train.txt \
   --test-file path/to/test.txt \
   --do-train \
+  --do-predict
+```
+
+```bash
+uv run --extra finetuning character-bert-finetune \
+  --dataset sst2 \
+  --embedding bert-base-uncased \
+  --max-train-examples 8 \
+  --max-validation-examples 4 \
+  --max-test-examples 4 \
+  --num-train-epochs 1 \
+  --do-train \
+  --do-predict
+
+uv run --extra finetuning character-bert-finetune \
+  --dataset conll2003 \
+  --embedding bert-base-uncased \
+  --max-train-examples 8 \
+  --max-validation-examples 4 \
+  --max-test-examples 4 \
   --do-predict
 ```
 

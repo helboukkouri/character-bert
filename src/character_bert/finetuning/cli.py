@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import logging
-from collections import Counter
 from pathlib import Path
 
 import torch
@@ -16,6 +15,7 @@ from transformers import (
     BertTokenizer,
 )
 
+from character_bert.finetuning.datasets import DATASET_PRESETS, load_finetuning_dataset
 from character_bert.finetuning.engine import TrainingConfig, evaluate, train
 from character_bert.finetuning.features import (
     classification_features,
@@ -24,6 +24,7 @@ from character_bert.finetuning.features import (
 )
 from character_bert.finetuning.tasks import (
     ClassificationExample,
+    FineTuningData,
     SequenceLabelingExample,
     load_classification_dataset,
     load_sequence_labeling_dataset,
@@ -42,6 +43,8 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
         level=logging.INFO,
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
     run(args)
 
 
@@ -49,16 +52,22 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fine-tune BERT or CharacterBERT.")
     parser.add_argument(
         "--task",
-        required=True,
+        default=None,
         choices=["classification", "sequence_labeling", "sequence_labelling"],
     )
     parser.add_argument("--embedding", required=True, help="Checkpoint name or path.")
     parser.add_argument(
+        "--dataset",
+        choices=sorted(DATASET_PRESETS),
+        default=None,
+        help="Classic datasets-library preset. Currently: sst2, conll2003.",
+    )
+    parser.add_argument(
         "--train-file",
-        required=True,
+        default=None,
         help="Training file in the legacy task format.",
     )
-    parser.add_argument("--test-file", required=True, help="Test file in the legacy task format.")
+    parser.add_argument("--test-file", default=None, help="Test file in the legacy task format.")
     parser.add_argument("--pretrained-dir", default="pretrained-models")
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--do-lower-case", action="store_true")
@@ -75,17 +84,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--adam-epsilon", type=float, default=1e-8)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--max-seq-length", type=int, default=None)
+    parser.add_argument("--max-train-examples", type=int, default=None)
+    parser.add_argument("--max-validation-examples", type=int, default=None)
+    parser.add_argument("--max-test-examples", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
 
 def run(args: argparse.Namespace) -> dict[str, float] | None:
-    task = "sequence_labeling" if args.task == "sequence_labelling" else args.task
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    output_dir = _resolve_output_dir(args, task)
+    logging.info("Using device: %s", device)
+    data = _load_data(args)
+    output_dir = _resolve_output_dir(args, data.task)
 
-    train_examples, validation_examples, test_examples = _load_examples(args, task)
     checkpoint_dir = _resolve_checkpoint_dir(args.embedding, args.pretrained_dir)
     is_character_model = "character" in checkpoint_dir.name or "character" in args.embedding
     tokenizer, feature_tokenizer = _load_tokenizers(
@@ -96,19 +108,23 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
     )
 
     train_examples = _retokenize_examples(
-        train_examples,
+        data.train_examples,
         feature_tokenizer.tokenize,
-        task,
+        data.task,
     )
     validation_examples = _retokenize_examples(
-        validation_examples,
+        data.validation_examples,
         feature_tokenizer.tokenize,
-        task,
+        data.task,
     )
-    test_examples = _retokenize_examples(test_examples, feature_tokenizer.tokenize, task)
-    labels = _labels_for_task(task, train_examples, validation_examples, test_examples)
+    test_examples = _retokenize_examples(
+        data.test_examples,
+        feature_tokenizer.tokenize,
+        data.task,
+    )
+    labels = data.labels
     max_seq_length = args.max_seq_length or _max_sequence_length(
-        task,
+        data.task,
         train_examples,
         validation_examples,
         test_examples,
@@ -119,7 +135,7 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
     indexer = CharacterIndexer() if is_character_model else tokenizer
     datasets = {
         "train": _build_dataset(
-            task,
+            data.task,
             train_examples,
             indexer,
             labels,
@@ -129,7 +145,7 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
             pad_token_label_id,
         ),
         "validation": _build_dataset(
-            task,
+            data.task,
             validation_examples,
             indexer,
             labels,
@@ -139,7 +155,7 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
             pad_token_label_id,
         ),
         "test": _build_dataset(
-            task,
+            data.task,
             test_examples,
             indexer,
             labels,
@@ -150,11 +166,11 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
         ),
     }
 
-    model = _load_model(task, checkpoint_dir, len(labels), is_character_model)
+    model = _load_model(data.task, checkpoint_dir, len(labels), is_character_model)
     model.to(device)
 
     config = TrainingConfig(
-        task=task,
+        task=data.task,
         output_dir=output_dir,
         device=device,
         train_batch_size=args.train_batch_size,
@@ -184,7 +200,7 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
 
     if args.do_predict:
         if args.do_train:
-            model = _load_model(task, output_dir, len(labels), is_character_model)
+            model = _load_model(data.task, output_dir, len(labels), is_character_model)
             model.to(device)
         results, _ = evaluate(
             config=config,
@@ -215,6 +231,36 @@ def _resolve_checkpoint_dir(embedding: str, pretrained_dir: str | Path) -> Path:
     return Path(pretrained_dir) / embedding
 
 
+def _load_data(args: argparse.Namespace) -> FineTuningData:
+    task = "sequence_labeling" if args.task == "sequence_labelling" else args.task
+    if args.dataset:
+        data = load_finetuning_dataset(
+            args.dataset,
+            do_lower_case=args.do_lower_case,
+            max_train_examples=args.max_train_examples,
+            max_validation_examples=args.max_validation_examples,
+            max_test_examples=args.max_test_examples,
+        )
+        if task is not None and task != data.task:
+            raise ValueError(f"Dataset preset {args.dataset!r} is for task {data.task!r}")
+        return data
+
+    if task is None:
+        raise ValueError("--task is required when using --train-file/--test-file")
+    if args.train_file is None or args.test_file is None:
+        raise ValueError("Provide either --dataset or both --train-file and --test-file")
+
+    train_examples, validation_examples, test_examples = _load_legacy_examples(args, task)
+    labels = _labels_for_examples(task, train_examples, validation_examples, test_examples)
+    return FineTuningData(
+        task=task,
+        train_examples=train_examples,
+        validation_examples=validation_examples,
+        test_examples=test_examples,
+        labels=labels,
+    )
+
+
 def _load_tokenizers(
     *,
     checkpoint_dir: Path,
@@ -233,7 +279,7 @@ def _load_tokenizers(
     return tokenizer, tokenizer.basic_tokenizer
 
 
-def _load_examples(args: argparse.Namespace, task: str):
+def _load_legacy_examples(args: argparse.Namespace, task: str):
     if task == "classification":
         train_examples = load_classification_dataset(
             args.train_file,
@@ -267,7 +313,7 @@ def _retokenize_examples(examples, tokenize, task: str):
     return retokenize_sequence_labeling_examples(examples, tokenize)
 
 
-def _labels_for_task(
+def _labels_for_examples(
     task: str,
     train_examples: list[ClassificationExample] | list[SequenceLabelingExample],
     validation_examples: list[ClassificationExample] | list[SequenceLabelingExample],
@@ -275,10 +321,8 @@ def _labels_for_task(
 ) -> list[str]:
     examples = [*train_examples, *validation_examples, *test_examples]
     if task == "classification":
-        counter = Counter(example.label for example in examples)
-    else:
-        counter = Counter(label for example in examples for label in example.label_sequence)
-    return sorted(counter)
+        return sorted({example.label for example in examples})
+    return sorted({label for example in examples for label in example.label_sequence})
 
 
 def _max_sequence_length(

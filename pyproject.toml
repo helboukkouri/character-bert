@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "datasets>=4.8",
     "pytest>=9.0",
     "ruff>=0.15",
 ]

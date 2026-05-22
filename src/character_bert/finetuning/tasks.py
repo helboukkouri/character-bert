@@ -21,6 +21,15 @@ class SequenceLabelingExample:
     label_sequence: list[str]
 
 
+@dataclass(frozen=True)
+class FineTuningData:
+    task: str
+    train_examples: list[ClassificationExample] | list[SequenceLabelingExample]
+    validation_examples: list[ClassificationExample] | list[SequenceLabelingExample]
+    test_examples: list[ClassificationExample] | list[SequenceLabelingExample]
+    labels: list[str]
+
+
 def load_classification_dataset(
     path: str | Path,
     *,
@@ -43,6 +52,31 @@ def load_classification_dataset(
                     label=label,
                 )
             )
+    return examples
+
+
+def load_classification_hf_dataset(
+    dataset,
+    *,
+    text_column: str,
+    label_column: str,
+    labels: list[str],
+    do_lower_case: bool,
+) -> list[ClassificationExample]:
+    tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
+    examples = []
+    for index, row in enumerate(dataset):
+        label = row[label_column]
+        if isinstance(label, int):
+            label = labels[label]
+        examples.append(
+            ClassificationExample(
+                id=index,
+                tokens_a=tokenizer.tokenize(row[text_column]),
+                tokens_b=None,
+                label=str(label),
+            )
+        )
     return examples
 
 
@@ -84,6 +118,29 @@ def load_sequence_labeling_dataset(
         )
 
     return retokenize_sequence_labeling_examples(examples, tokenizer.tokenize)
+
+
+def load_sequence_labeling_hf_dataset(
+    dataset,
+    *,
+    tokens_column: str,
+    labels_column: str,
+    labels: list[str],
+) -> list[SequenceLabelingExample]:
+    examples = []
+    for index, row in enumerate(dataset):
+        label_sequence = [
+            labels[label] if isinstance(label, int) else str(label)
+            for label in row[labels_column]
+        ]
+        examples.append(
+            SequenceLabelingExample(
+                id=index,
+                token_sequence=list(row[tokens_column]),
+                label_sequence=label_sequence,
+            )
+        )
+    return examples
 
 
 def retokenize_classification_examples(

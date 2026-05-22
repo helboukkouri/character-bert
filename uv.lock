@@ -204,6 +204,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "datasets" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -223,6 +224,7 @@ pretraining = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'pretraining'", specifier = ">=1.13" },
+    { name = "datasets", marker = "extra == 'dev'", specifier = ">=4.8" },
     { name = "datasets", marker = "extra == 'finetuning'", specifier = ">=4.8" },
     { name = "datasets", marker = "extra == 'pretraining'", specifier = ">=4.8" },
     { name = "evaluate", marker = "extra == 'finetuning'", specifier = ">=0.4.6" },
