@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm, trange
 from transformers import PreTrainedTokenizerBase, get_linear_schedule_with_warmup
 
@@ -36,6 +37,7 @@ class TrainingConfig:
     adam_epsilon: float = 1e-8
     max_grad_norm: float = 1.0
     seed: int = 42
+    tensorboard_log_dir: Path | None = None
 
 
 def train(
@@ -87,54 +89,75 @@ def train(
         len(train_dataset),
         config.num_train_epochs,
     )
+    writer = SummaryWriter(log_dir=config.tensorboard_log_dir or config.output_dir / "tensorboard")
+    LOGGER.info("Writing TensorBoard logs to %s", writer.log_dir)
     global_step = 0
     total_loss = 0.0
     best_metric = -1.0
     best_epoch = -1
 
-    model.zero_grad()
-    set_seed(config.seed)
-    for epoch in trange(config.num_train_epochs, desc="Epoch"):
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-            model.train()
-            batch = tuple(tensor.to(config.device) for tensor in batch)
-            outputs = model(
-                input_ids=batch[0],
-                attention_mask=batch[1],
-                token_type_ids=batch[2],
-                labels=batch[3],
-                return_dict=False,
+    try:
+        model.zero_grad()
+        set_seed(config.seed)
+        for epoch in trange(config.num_train_epochs, desc="Epoch"):
+            epoch_loss = 0.0
+            epoch_steps = 0
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                model.train()
+                batch = tuple(tensor.to(config.device) for tensor in batch)
+                outputs = model(
+                    input_ids=batch[0],
+                    attention_mask=batch[1],
+                    token_type_ids=batch[2],
+                    labels=batch[3],
+                    return_dict=False,
+                )
+                loss = outputs[0]
+                if config.gradient_accumulation_steps > 1:
+                    loss = loss / config.gradient_accumulation_steps
+                loss.backward()
+
+                loss_value = loss.item()
+                total_loss += loss_value
+                epoch_loss += loss_value
+                epoch_steps += 1
+                if (step + 1) % config.gradient_accumulation_steps == 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
+                    optimizer.step()
+                    scheduler.step()
+                    model.zero_grad()
+                    global_step += 1
+                    writer.add_scalar("train/loss", loss_value, global_step)
+                    writer.add_scalar(
+                        "train/learning_rate",
+                        scheduler.get_last_lr()[0],
+                        global_step,
+                    )
+
+            writer.add_scalar("train/epoch_loss", epoch_loss / max(epoch_steps, 1), epoch)
+            results, _ = evaluate(
+                config=config,
+                eval_dataset=validation_dataset,
+                model=model,
+                labels=labels,
+                pad_token_label_id=pad_token_label_id,
             )
-            loss = outputs[0]
-            if config.gradient_accumulation_steps > 1:
-                loss = loss / config.gradient_accumulation_steps
-            loss.backward()
+            for metric_name, metric_value in results.items():
+                writer.add_scalar(f"validation/{metric_name}", metric_value, epoch)
 
-            total_loss += loss.item()
-            if (step + 1) % config.gradient_accumulation_steps == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
-                optimizer.step()
-                scheduler.step()
-                model.zero_grad()
-                global_step += 1
-
-        results, _ = evaluate(
-            config=config,
-            eval_dataset=validation_dataset,
-            model=model,
-            labels=labels,
-            pad_token_label_id=pad_token_label_id,
-        )
-        metric = results["f1"]
-        if metric > best_metric:
-            best_metric = metric
-            best_epoch = epoch
-            config.output_dir.mkdir(parents=True, exist_ok=True)
-            model.save_pretrained(config.output_dir)
-            if tokenizer is not None:
-                tokenizer.save_pretrained(config.output_dir)
-            torch.save(config, config.output_dir / "training_args.bin")
-            LOGGER.info("Saved best model checkpoint to %s", config.output_dir)
+            metric = results["f1"]
+            writer.add_scalar("validation/best_metric", max(best_metric, metric), epoch)
+            if metric > best_metric:
+                best_metric = metric
+                best_epoch = epoch
+                config.output_dir.mkdir(parents=True, exist_ok=True)
+                model.save_pretrained(config.output_dir)
+                if tokenizer is not None:
+                    tokenizer.save_pretrained(config.output_dir)
+                torch.save(config, config.output_dir / "training_args.bin")
+                LOGGER.info("Saved best model checkpoint to %s", config.output_dir)
+    finally:
+        writer.close()
 
     average_loss = total_loss / max(global_step, 1)
     return global_step, average_loss, best_metric, best_epoch

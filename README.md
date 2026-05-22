@@ -105,6 +105,11 @@ cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli
 
 `--write-glue-submission` writes files under `results/.../glue_submission/`.
 For MNLI it writes both `MNLI-m.tsv` and `MNLI-mm.tsv`.
+Fine-tuning writes TensorBoard logs to `results/.../tensorboard/` by default.
+
+```bash
+uv run --extra finetuning tensorboard --logdir results
+```
 
 Small GPU smoke checks:
 

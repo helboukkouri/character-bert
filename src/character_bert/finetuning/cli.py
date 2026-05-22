@@ -98,6 +98,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-train-examples", type=int, default=None)
     parser.add_argument("--max-validation-examples", type=int, default=None)
     parser.add_argument("--max-test-examples", type=int, default=None)
+    parser.add_argument(
+        "--tensorboard-log-dir",
+        default=None,
+        help="TensorBoard log directory. Defaults to output-dir/tensorboard.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -195,6 +200,9 @@ def run(args: argparse.Namespace) -> dict[str, float] | None:
         adam_epsilon=args.adam_epsilon,
         max_grad_norm=args.max_grad_norm,
         seed=args.seed,
+        tensorboard_log_dir=Path(args.tensorboard_log_dir)
+        if args.tensorboard_log_dir is not None
+        else None,
     )
 
     best_metric = None

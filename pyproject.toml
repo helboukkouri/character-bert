@@ -28,6 +28,7 @@ finetuning = [
     "scikit-learn>=1.8",
     "datasets>=4.8",
     "evaluate>=0.4.6",
+    "tensorboard>=2.20",
 ]
 pretraining = [
     "datasets>=4.8",
