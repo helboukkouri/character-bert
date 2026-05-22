@@ -9,6 +9,7 @@ import torch
 from safetensors.torch import load_file as load_safetensors_file
 from torch.nn import CrossEntropyLoss
 from transformers import (
+    BasicTokenizer,
     BertConfig,
     BertForSequenceClassification,
     BertForTokenClassification,
@@ -316,7 +317,7 @@ def _load_tokenizers(
     if not tokenizer_source.exists():
         tokenizer_source = "bert-base-uncased"
     tokenizer = BertTokenizer.from_pretrained(tokenizer_source, do_lower_case=do_lower_case)
-    return tokenizer, tokenizer.basic_tokenizer
+    return tokenizer, BasicTokenizer(do_lower_case=do_lower_case)
 
 
 def _load_legacy_examples(args: argparse.Namespace, task: str):
