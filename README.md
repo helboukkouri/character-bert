@@ -1,8 +1,8 @@
 # CharacterBERT
 
 This branch is a refresh of the original COLING 2020 CharacterBERT repository.
-The historical code has been moved to [`achived/`](./achived/) so we can rebuild the
-package around a modern Python layout while keeping the old implementation close at hand.
+The package is organized around a modern Python layout while preserving the
+modeling behavior and checkpoint compatibility of the original implementation.
 
 ## Goals
 
@@ -17,9 +17,8 @@ package around a modern Python layout while keeping the old implementation close
 src/character_bert/
   modeling/       reusable library: config, CharacterCNN, encoder, heads, indexer
   finetuning/     fine-tuning app: CLI, task code, app-local data/utils
-  pretraining/    pretraining app: CLI, corpus code, app-local data/utils
+  pretraining/    pretraining app: CLI and app-local data/utils
 tests/            regression and architecture tests for the refreshed package
-achived/          previous repository state, kept for reference
 ```
 
 The `modeling` package is the reusable part of the project. User code should be able to
@@ -57,8 +56,13 @@ checkpoints add MLM/NSP heads:
 Download them with:
 
 ```bash
-uv run character-bert-download helboukkouri/character-bert --output-dir pretrained-models/hf_character_bert
-uv run character-bert-download helboukkouri/character-bert-medical --output-dir pretrained-models/hf_character_bert_medical
+uv run character-bert-download \
+  helboukkouri/character-bert \
+  --output-dir pretrained-models/hf_character_bert
+
+uv run character-bert-download \
+  helboukkouri/character-bert-medical \
+  --output-dir pretrained-models/hf_character_bert_medical
 ```
 
 ## Tests
@@ -73,6 +77,21 @@ Checkpoint-backed tests skip automatically when the corresponding model files ar
 
 Runtime folders such as `pretrained-models/` and `results/` are intentionally not tracked.
 Download and training commands create them when needed.
+
+## Fine-Tuning
+
+The fine-tuning app supports the original classification and sequence-labeling file
+formats:
+
+```bash
+uv run character-bert-finetune \
+  --task classification \
+  --embedding general_character_bert \
+  --train-file path/to/train.txt \
+  --test-file path/to/test.txt \
+  --do-train \
+  --do-predict
+```
 
 ## Smoke Test
 

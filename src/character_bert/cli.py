@@ -9,7 +9,10 @@ from character_bert.modeling import CharacterBertModel, CharacterIndexer
 
 def download() -> None:
     parser = argparse.ArgumentParser(description="Download a CharacterBERT checkpoint.")
-    parser.add_argument("model", help="Hub repo id or alias: general, medical")
+    parser.add_argument(
+        "model",
+        help="Hub repo id or alias such as general, medical, bert-base-uncased",
+    )
     parser.add_argument("--output-dir", default=None, help="Local destination directory")
     args = parser.parse_args()
 
