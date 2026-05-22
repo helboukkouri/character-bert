@@ -1,3 +1,1 @@
-from character_bert.modeling import CharacterBertForPreTraining
-
-__all__ = ["CharacterBertForPreTraining"]
+"""Pretraining application code built on top of :mod:`character_bert.modeling`."""

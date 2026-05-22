@@ -15,14 +15,23 @@ package around a modern Python layout while keeping the old implementation close
 
 ```text
 src/character_bert/
-  modeling/       CharacterCNN, CharacterBERT encoder, and pretraining heads
-  data/           token/character indexing utilities
-  finetuning/     fine-tuning entry points and task adapters
-  pretraining/    pretraining entry points and data builders
-  training/       shared training utilities
+  modeling/       reusable library: config, CharacterCNN, encoder, heads, indexer
+  finetuning/     fine-tuning app: CLI, task code, app-local data/utils
+  pretraining/    pretraining app: CLI, corpus code, app-local data/utils
 tests/            regression and architecture tests for the refreshed package
 achived/          previous repository state, kept for reference
 ```
+
+The `modeling` package is the reusable part of the project. User code should be able to
+import it without pulling in training applications:
+
+```python
+from character_bert.modeling import CharacterBertModel, CharacterIndexer
+```
+
+Fine-tuning and pretraining are organized as app namespaces that depend on `modeling`.
+Their data processing and workflow helpers should stay local to each app unless a helper
+is genuinely shared.
 
 ## Setup
 
@@ -61,6 +70,9 @@ uv run pytest
 ```
 
 Checkpoint-backed tests skip automatically when the corresponding model files are not present.
+
+Runtime folders such as `pretrained-models/` and `results/` are intentionally not tracked.
+Download and training commands create them when needed.
 
 ## Smoke Test
 

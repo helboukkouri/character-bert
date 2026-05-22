@@ -38,6 +38,8 @@ legacy-downloads = [
 [project.scripts]
 character-bert-download = "character_bert.cli:download"
 character-bert-smoke-test = "character_bert.cli:smoke_test"
+character-bert-finetune = "character_bert.finetuning.cli:main"
+character-bert-pretrain = "character_bert.pretraining.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.25"]

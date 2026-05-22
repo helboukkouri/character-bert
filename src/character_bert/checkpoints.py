@@ -18,6 +18,7 @@ def download_checkpoint(model: str, output_dir: str | Path | None = None) -> Pat
         if output_dir is not None
         else Path("pretrained-models") / repo_id.split("/")[-1]
     )
+    destination.parent.mkdir(parents=True, exist_ok=True)
     snapshot_download(
         repo_id=repo_id,
         local_dir=destination,

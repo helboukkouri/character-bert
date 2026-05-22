@@ -1,4 +1,1 @@
-"""Fine-tuning utilities for CharacterBERT.
-
-Task-specific trainers will live here as the refreshed repo grows.
-"""
+"""Fine-tuning application code built on top of :mod:`character_bert.modeling`."""
