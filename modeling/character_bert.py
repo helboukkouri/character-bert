@@ -78,6 +78,8 @@ class CharacterBertModel(BertPreTrainedModel):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
         **kwargs
     ):
 
@@ -175,6 +177,17 @@ class CharacterBertModel(BertPreTrainedModel):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids,
             token_type_ids=token_type_ids
@@ -185,6 +198,9 @@ class CharacterBertModel(BertPreTrainedModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=False,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)

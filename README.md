@@ -15,6 +15,7 @@ This is the code repository for the paper "[CharacterBERT: Reconciling ELMo and 
   - [Installation](#installation)
   - [Pre-trained models](#pre-trained-models)
   - [Using CharacterBERT in practice](#using-characterbert-in-practice)
+  - [Running tests](#running-tests)
 - [How do I pre-train CharacterBERT?](#how-do-i-pre-train-characterbert)
 - [How do I reproduce the paper's results?](#how-do-i-reproduce-the-papers-results)
 - [Running experiments on GPUs](#running-experiments-on-gpus)
@@ -75,7 +76,7 @@ Then install the following packages:
 
 ```bash
 conda install pytorch cudatoolkit=11.8 -c pytorch
-pip install transformers==4.34.0 scikit-learn==1.3.1 gdown==4.7.1
+pip install transformers==4.34.0 scikit-learn==1.3.1 gdown==6.0.0
 ```
 
 > Note 1: If you will not be running experiments on a GPU, install pyTorch via this command instead:<br> `conda install pytorch cpuonly -c pytorch`
@@ -93,6 +94,8 @@ You can use the `download.py` script to download any of the models below:
 | general_bert           | General Domain BERT pre-trained from scratch on English Wikipedia and [OpenWebText](https://skylion007.github.io/OpenWebTextCorpus/). <sup>1</sup>                                                                                                                        |
 | medical_bert           | Medical Domain BERT initialized from **general_bert** then further pre-trained on [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) clinical notes and [PMC OA](https://www.ncbi.nlm.nih.gov/pmc/tools/openftlist/) biomedical paper abstracts. <sup>2</sup>       |
 | bert-base-uncased      | The original General Domain [BERT (base, uncased)](https://github.com/google-research/bert#pre-trained-models)                                                                                                                                                                                                                          |
+| hf_character_bert      | Hugging Face Hub version of **general_character_bert**, with the same encoder weights plus MLM/NSP pre-training heads and `mlm_vocab.txt`.                                                                                                                                 |
+| hf_character_bert_medical | Hugging Face Hub version of **medical_character_bert**, with the same encoder weights plus MLM/NSP pre-training heads and `mlm_vocab.txt`.                                                                                                                              |
 
 > <sup>1, 2</sup> <small>We offer BERT models as well as CharacterBERT models since we have pre-trained both architectures in an effort to fairly compare these architectures. Our BERT models use the same architecture and starting wordpiece vocabulary as `bert-base-uncased`.</small><br>
 
@@ -100,6 +103,12 @@ For instance, let's download the medical version of CharacterBERT:
 
 ```bash
 python download.py --model='medical_character_bert'
+```
+
+Download the Hugging Face Hub checkpoint with MLM/NSP heads:
+
+```bash
+python download.py --model='hf_character_bert'
 ```
 
 We can download also download all models in a single command:
@@ -217,6 +226,25 @@ bash run_experiments.sh
 ```
 
 You can adapt the `run_experiments.sh` script to try out any available model. You should also be able to add real classification and sequence labelling tasks by adapting the `data.py` script.
+
+### Running tests
+
+The test suite uses Python's built-in `unittest` runner:
+
+```bash
+python -m unittest discover
+```
+
+Architecture tests run without downloaded checkpoints. Pre-trained regression tests are skipped
+unless the corresponding model folders exist under `pretrained-models/`. To run the full suite,
+download all checkpoints first:
+
+```bash
+python download.py --model='all'
+python download.py --model='hf_character_bert'
+python download.py --model='hf_character_bert_medical'
+python -m unittest discover
+```
 
 ## Running experiments on GPUs
 

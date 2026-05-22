@@ -13,7 +13,8 @@ import metrics.sequence_labelling as seqeval_metrics
 
 import torch
 from torch.utils.data import SequentialSampler, RandomSampler, DataLoader
-from transformers import AdamW, get_linear_schedule_with_warmup
+from torch.optim import AdamW
+from transformers import get_linear_schedule_with_warmup
 
 from utils.misc import set_seed
 

@@ -8,6 +8,7 @@ import argparse
 import tarfile
 import logging
 import requests
+from huggingface_hub import snapshot_download
 
 logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(filename)s -   %(message)s",
@@ -21,28 +22,80 @@ MODEL_TO_URL = {
     'medical_bert': 'https://drive.google.com/uc?id=1GmnXJFntcEfrRY4pVZpJpg7FH62m47HS',
 }
 
+HF_MODEL_TO_REPO = {
+    'hf_character_bert': 'helboukkouri/character-bert',
+    'hf_character_bert_medical': 'helboukkouri/character-bert-medical',
+}
+
+BERT_BASE_UNCASED_FILES = {
+    'model': (
+        'https://huggingface.co/bert-base-uncased/resolve/main/pytorch_model.bin',
+        'pytorch_model.bin',
+    ),
+    'vocabulary': (
+        'https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt',
+        'vocab.txt',
+    ),
+    'config': (
+        'https://huggingface.co/bert-base-uncased/resolve/main/config.json',
+        'config.json',
+    ),
+}
+
+
+def model_is_downloaded(path):
+    return all(
+        os.path.exists(os.path.join(path, filename))
+        for filename in ['config.json', 'pytorch_model.bin']
+    )
+
+
+def download_url(url, destination):
+    with requests.get(url, stream=True, timeout=30) as response:
+        response.raise_for_status()
+        with open(destination, mode='wb') as f:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+
+def extract_tar_safely(tar, path):
+    destination = os.path.abspath(path)
+    for member in tar.getmembers():
+        member_path = os.path.abspath(os.path.join(destination, member.name))
+        if os.path.commonpath([destination, member_path]) != destination:
+            raise RuntimeError(f"Archive member escapes destination: {member.name}")
+    tar.extractall(path=path)
+
+
 def download_file_from_google_drive(url, destination):
-    gdown.download(url, destination, quiet=False)
+    output = gdown.download(url, destination, quiet=False)
+    if output is None or not os.path.exists(destination):
+        raise RuntimeError(f"Failed to download archive from {url}")
 
 def download_model(name):
-    if os.path.exists(os.path.join('pretrained-models', name)):
-        logging.info(f"Path {os.path.join('pretrained-models', name)} already exists.")
+    model_path = os.path.join('pretrained-models', name)
+    if model_is_downloaded(model_path):
+        logging.info(f"Path {model_path} already exists.")
         logging.info(f'Skipped download of {name} model.')
     else:
-        os.makedirs(os.path.join('pretrained-models', name), exist_ok=False)
-        if name == 'bert-base-uncased':
-            urls = {
-                'model': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-pytorch_model.bin',
-                'vocabulary': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt',
-                'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json'
-            }
+        os.makedirs(model_path, exist_ok=True)
+        if name in HF_MODEL_TO_REPO:
+            repo_id = HF_MODEL_TO_REPO[name]
+            logging.info(f'Downloading {repo_id} from Hugging Face Hub (~730MB folder)')
+            snapshot_download(
+                repo_id=repo_id,
+                local_dir=model_path,
+                local_dir_use_symlinks=False,
+            )
+        elif name == 'bert-base-uncased':
             logging.info(f'Downloading {name} model (~420MB folder)')
-            for _, url in urls.items():
-                file_name = os.path.basename(url).split('-')[-1]
-                file_destination = os.path.join('pretrained-models', name, file_name)
-                response = requests.get(url)
-                with open(file_destination, mode='wb') as f:
-                    f.write(response.content)
+            for _, (url, file_name) in BERT_BASE_UNCASED_FILES.items():
+                file_destination = os.path.join(model_path, file_name)
+                if os.path.exists(file_destination):
+                    logging.info(f'File {file_destination} already exists.')
+                    continue
+                download_url(url, file_destination)
         else:
             file_destination = os.path.join('pretrained-models', 'model.tar.xz')
             model_url = MODEL_TO_URL[name]
@@ -52,7 +105,7 @@ def download_model(name):
 
             logging.info('Extracting model from archive (~420MB folder)')
             tar = tarfile.open(file_destination, "r:xz")
-            tar.extractall(path=os.path.dirname(file_destination))
+            extract_tar_safely(tar, path=os.path.dirname(file_destination))
             tar.close()
 
             logging.info('Removing archive')
@@ -65,7 +118,7 @@ def main():
         "--model",
         type=str,
         required=True,
-        choices=list(MODEL_TO_URL.keys()) + ['bert-base-uncased', 'all'],
+        choices=list(MODEL_TO_URL.keys()) + list(HF_MODEL_TO_REPO.keys()) + ['bert-base-uncased', 'all'],
         help="A keyword for downloading a specific pre-trained model"
     )
     args = parser.parse_args()

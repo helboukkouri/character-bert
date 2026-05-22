@@ -86,7 +86,7 @@ def parse_args():
         default=0.1, type=float, help="Weight decay if we apply some.")
     parser.add_argument(
         "--warmup_ratio",
-        default=0.1, type=int, help="Linear warmup over warmup_ratio*total_steps.")
+        default=0.1, type=float, help="Linear warmup over warmup_ratio*total_steps.")
     parser.add_argument(
         "--adam_epsilon",
         default=1e-8, type=float, help="Epsilon for Adam optimizer.")
