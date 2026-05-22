@@ -110,6 +110,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local archive of the pre-refresh repository.
+achived/
+archived/
+
 # Spyder project settings
 .spyderproject
 .spyproject

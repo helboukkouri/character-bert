@@ -1,0 +1,58 @@
+[project]
+name = "character-bert"
+version = "0.2.0"
+description = "CharacterBERT models, pretraining, and fine-tuning utilities."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Hicham El Boukkouri" },
+]
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.40",
+    "huggingface-hub>=0.23",
+    "safetensors>=0.4",
+    "numpy>=1.26",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.5",
+]
+finetuning = [
+    "scikit-learn>=1.4",
+    "datasets>=2.19",
+    "evaluate>=0.4",
+]
+pretraining = [
+    "datasets>=2.19",
+    "accelerate>=0.30",
+]
+legacy-downloads = [
+    "gdown>=6.0",
+]
+
+[project.scripts]
+character-bert-download = "character_bert.cli:download"
+character-bert-smoke-test = "character_bert.cli:smoke_test"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
