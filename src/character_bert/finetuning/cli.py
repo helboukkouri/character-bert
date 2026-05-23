@@ -493,13 +493,14 @@ def _write_glue_submission(
     submission_dir = output_dir / "glue_submission"
     submission_dir.mkdir(parents=True, exist_ok=True)
 
-    for split_name, filename in glue_submission_splits(spec).items():
+    for submission in glue_submission_splits(spec):
         examples = load_test_examples(
             spec,
-            split_name,
+            submission.split,
             labels=labels,
             do_lower_case=args.do_lower_case,
             max_examples=args.max_test_examples,
+            config=submission.config,
         )
         examples = _retokenize_examples(examples, feature_tokenizer.tokenize, data.task)
         dataset = _build_dataset(
@@ -513,8 +514,8 @@ def _write_glue_submission(
             pad_token_label_id,
         )
         logits = predict(config=config, dataset=dataset, model=model)
-        predictions = _glue_predictions(data.task, logits, labels)
-        with (submission_dir / filename).open("w", encoding="utf-8") as output_file:
+        predictions = _glue_predictions(data.task, logits, labels, spec.submission_labels)
+        with (submission_dir / submission.filename).open("w", encoding="utf-8") as output_file:
             output_file.write("index\tprediction\n")
             for example, prediction_value in zip(examples, predictions, strict=True):
                 output_file.write(f"{example.id}\t{prediction_value}\n")
@@ -524,7 +525,11 @@ def _glue_predictions(
     task: str,
     logits,
     labels: list[str] | None,
+    submission_labels: dict[str, str] | None = None,
 ) -> list[str]:
     if task == "regression":
         return [f"{min(5.0, max(0.0, float(value))):.3f}" for value in logits.squeeze(-1)]
-    return [labels[index] for index in logits.argmax(axis=1)]
+    predictions = [labels[index] for index in logits.argmax(axis=1)]
+    if submission_labels is None:
+        return predictions
+    return [submission_labels[prediction] for prediction in predictions]

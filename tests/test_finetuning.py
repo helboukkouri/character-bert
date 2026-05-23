@@ -6,7 +6,8 @@ import torch
 from datasets import ClassLabel, Dataset, Features, Sequence, Value
 from transformers import BertTokenizer
 
-from character_bert.finetuning.datasets import DATASET_PRESETS
+from character_bert.finetuning.cli import _glue_predictions
+from character_bert.finetuning.datasets import DATASET_PRESETS, GLUE_TASKS, glue_submission_splits
 from character_bert.finetuning.features import (
     classification_features,
     features_to_dataset,
@@ -132,6 +133,45 @@ class FineTuningDataTests(unittest.TestCase):
         self.assertEqual(DATASET_PRESETS["sst2"].task, "classification")
         self.assertEqual(DATASET_PRESETS["stsb"].task, "regression")
         self.assertEqual(DATASET_PRESETS["conll2003"].task, "sequence_labeling")
+
+    def test_mnli_submission_includes_ax_diagnostic(self):
+        submissions = glue_submission_splits(GLUE_TASKS["mnli"])
+
+        self.assertEqual(
+            [submission.filename for submission in submissions],
+            ["MNLI-m.tsv", "MNLI-mm.tsv", "AX.tsv"],
+        )
+        self.assertEqual(submissions[-1].config, "ax")
+        self.assertEqual(submissions[-1].split, "test")
+
+    def test_glue_submission_labels_match_expected_format(self):
+        expected_labels = {
+            "cola": ["0", "1"],
+            "sst2": ["0", "1"],
+            "mrpc": ["0", "1"],
+            "qqp": ["0", "1"],
+            "mnli": ["entailment", "neutral", "contradiction"],
+            "qnli": ["entailment", "not_entailment"],
+            "rte": ["entailment", "not_entailment"],
+            "wnli": ["0", "1"],
+        }
+
+        for dataset_name, expected in expected_labels.items():
+            with self.subTest(dataset=dataset_name):
+                spec = GLUE_TASKS[dataset_name]
+                labels = (
+                    expected if spec.submission_labels is None else list(spec.submission_labels)
+                )
+                logits = torch.eye(len(labels))
+
+                predictions = _glue_predictions(
+                    spec.task,
+                    logits,
+                    labels,
+                    spec.submission_labels,
+                )
+
+                self.assertEqual(predictions, expected)
 
 
 class FineTuningFeatureTests(unittest.TestCase):

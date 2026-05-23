@@ -26,15 +26,36 @@ class DatasetSpec:
     validation_split: str = "validation"
     test_split: str = "test"
     submission_file: str | None = None
+    submission_labels: dict[str, str] | None = None
     extra_test_splits: dict[str, str] | None = None
+    extra_test_configs: dict[str, tuple[str, str]] | None = None
+
+
+@dataclass(frozen=True)
+class SubmissionSpec:
+    split: str
+    filename: str
+    config: str | None = None
 
 
 GLUE_TASKS = {
     "cola": DatasetSpec(
-        "cola", "nyu-mll/glue", "cola", "classification", "sentence", submission_file="CoLA.tsv"
+        "cola",
+        "nyu-mll/glue",
+        "cola",
+        "classification",
+        "sentence",
+        submission_file="CoLA.tsv",
+        submission_labels={"unacceptable": "0", "acceptable": "1"},
     ),
     "sst2": DatasetSpec(
-        "sst2", "nyu-mll/glue", "sst2", "classification", "sentence", submission_file="SST-2.tsv"
+        "sst2",
+        "nyu-mll/glue",
+        "sst2",
+        "classification",
+        "sentence",
+        submission_file="SST-2.tsv",
+        submission_labels={"negative": "0", "positive": "1"},
     ),
     "mrpc": DatasetSpec(
         "mrpc",
@@ -44,6 +65,7 @@ GLUE_TASKS = {
         "sentence1",
         "sentence2",
         submission_file="MRPC.tsv",
+        submission_labels={"not_equivalent": "0", "equivalent": "1"},
     ),
     "stsb": DatasetSpec(
         "stsb",
@@ -62,6 +84,7 @@ GLUE_TASKS = {
         "question1",
         "question2",
         submission_file="QQP.tsv",
+        submission_labels={"not_duplicate": "0", "duplicate": "1"},
     ),
     "mnli": DatasetSpec(
         "mnli",
@@ -74,6 +97,7 @@ GLUE_TASKS = {
         test_split="test_matched",
         submission_file="MNLI-m.tsv",
         extra_test_splits={"test_mismatched": "MNLI-mm.tsv"},
+        extra_test_configs={"ax": ("test", "AX.tsv")},
     ),
     "qnli": DatasetSpec(
         "qnli",
@@ -101,6 +125,7 @@ GLUE_TASKS = {
         "sentence1",
         "sentence2",
         submission_file="WNLI.tsv",
+        submission_labels={"not_entailment": "0", "entailment": "1"},
     ),
 }
 
@@ -173,10 +198,11 @@ def load_finetuning_dataset(
     )
 
 
-def load_dataset_splits(spec: DatasetSpec) -> DatasetDict:
-    if spec.config is None:
+def load_dataset_splits(spec: DatasetSpec, *, config: str | None = None) -> DatasetDict:
+    dataset_config = spec.config if config is None else config
+    if dataset_config is None:
         return load_dataset(spec.path)
-    return load_dataset(spec.path, spec.config)
+    return load_dataset(spec.path, dataset_config)
 
 
 def load_test_examples(
@@ -186,17 +212,26 @@ def load_test_examples(
     labels: list[str] | None,
     do_lower_case: bool,
     max_examples: int | None,
+    config: str | None = None,
 ):
-    dataset = _limit(load_dataset_splits(spec)[split_name], max_examples)
+    dataset = _limit(load_dataset_splits(spec, config=config)[split_name], max_examples)
     return _sequence_examples(dataset, spec, labels, do_lower_case)
 
 
-def glue_submission_splits(spec: DatasetSpec) -> dict[str, str]:
+def glue_submission_splits(spec: DatasetSpec) -> list[SubmissionSpec]:
     if spec.submission_file is None:
-        return {}
-    splits = {spec.test_split: spec.submission_file}
+        return []
+    splits = [SubmissionSpec(spec.test_split, spec.submission_file)]
     if spec.extra_test_splits:
-        splits.update(spec.extra_test_splits)
+        splits.extend(
+            SubmissionSpec(split_name, filename)
+            for split_name, filename in spec.extra_test_splits.items()
+        )
+    if spec.extra_test_configs:
+        splits.extend(
+            SubmissionSpec(split_name, filename, config=config)
+            for config, (split_name, filename) in spec.extra_test_configs.items()
+        )
     return splits
 
 
